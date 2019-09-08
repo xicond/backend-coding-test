@@ -29,4 +29,14 @@ describe('API tests', () => {
                 .expect(200, done);
         });
     });
+
+    describe('GET /rides/1', () => {
+        it('respond with RIDES_NOT_FOUND_ERROR', function (done) {
+            request(app)
+                .get('/rides/1')
+                .expect('Content-Type', /json/)
+                .expect(200)
+                .expect(/RIDES_NOT_FOUND_ERROR/, done);
+        });
+    });
 });

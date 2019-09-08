@@ -6,8 +6,20 @@ const app = express();
 const bodyParser = require('body-parser');
 const jsonParser = bodyParser.json();
 
+const { createLogger, transports } = require('winston');
+const logger = createLogger({
+    level: 'info',
+    transports: [
+        new transports.Console(),
+        new transports.File({ filename: 'combined.log' })
+    ]
+});
+
 module.exports = (db) => {
-    app.get('/health', (req, res) => res.send('Healthy'));
+    app.get('/health', (req, res) => {
+        logger.log('info', 'Hit %s', 'Healthy');
+        res.send('Healthy');
+    });
 
     app.post('/rides', jsonParser, (req, res) => {
         const startLatitude = Number(req.body.start_lat);
@@ -55,7 +67,7 @@ module.exports = (db) => {
 
         var values = [req.body.start_lat, req.body.start_long, req.body.end_lat, req.body.end_long, req.body.rider_name, req.body.driver_name, req.body.driver_vehicle];
         
-        const result = db.run('INSERT INTO Rides(startLat, startLong, endLat, endLong, riderName, driverName, driverVehicle) VALUES (?, ?, ?, ?, ?, ?, ?)', values, function (err) {
+        db.run('INSERT INTO Rides(startLat, startLong, endLat, endLong, riderName, driverName, driverVehicle) VALUES (?, ?, ?, ?, ?, ?, ?)', values, function (err) {
             if (err) {
                 return res.send({
                     error_code: 'SERVER_ERROR',
@@ -97,7 +109,7 @@ module.exports = (db) => {
     });
 
     app.get('/rides/:id', (req, res) => {
-        db.all(`SELECT * FROM Rides WHERE rideID='${req.params.id}'`, function (err, rows) {
+        db.all('SELECT * FROM Rides WHERE rideID=?', [req.params.id], function (err, rows) {
             if (err) {
                 return res.send({
                     error_code: 'SERVER_ERROR',
