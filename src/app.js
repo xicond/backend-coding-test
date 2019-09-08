@@ -6,6 +6,12 @@ const app = express();
 const bodyParser = require('body-parser');
 const jsonParser = bodyParser.json();
 
+const asyncMiddleware = fn =>
+    (req, res, next) => {
+        Promise.resolve(fn(req, res, next))
+            .catch(next);
+    };
+
 const { createLogger, transports } = require('winston');
 const logger = createLogger({
     level: 'info',
@@ -21,7 +27,7 @@ module.exports = (db) => {
         res.send('Healthy');
     });
 
-    app.post('/rides', jsonParser, (req, res) => {
+    app.post('/rides', jsonParser, asyncMiddleware(async (req, res) => {
         const startLatitude = Number(req.body.start_lat);
         const startLongitude = Number(req.body.start_long);
         const endLatitude = Number(req.body.end_lat);
@@ -67,7 +73,7 @@ module.exports = (db) => {
 
         var values = [req.body.start_lat, req.body.start_long, req.body.end_lat, req.body.end_long, req.body.rider_name, req.body.driver_name, req.body.driver_vehicle];
         
-        db.run('INSERT INTO Rides(startLat, startLong, endLat, endLong, riderName, driverName, driverVehicle) VALUES (?, ?, ?, ?, ?, ?, ?)', values, function (err) {
+        await db.run('INSERT INTO Rides(startLat, startLong, endLat, endLong, riderName, driverName, driverVehicle) VALUES (?, ?, ?, ?, ?, ?, ?)', values, function (err) {
             if (err) {
                 return res.send({
                     error_code: 'SERVER_ERROR',
@@ -86,10 +92,19 @@ module.exports = (db) => {
                 res.send(rows);
             });
         });
-    });
+    }) );
 
-    app.get('/rides', (req, res) => {
-        db.all('SELECT * FROM Rides', function (err, rows) {
+    app.get('/rides', asyncMiddleware(async (req, res) => {
+        let offset = Number(req.query.offset);
+        if (isNaN(offset)) {
+            offset = 0;
+        }
+        let limit = Number(req.query.limit);
+        if (isNaN(limit)) {
+            limit = 10;
+        }
+        logger.log('info', 'limit ' + limit + ' offset ' + offset);
+        await db.all('SELECT * FROM Rides LIMIT ? OFFSET ?', [limit, offset], function (err, rows) {
             if (err) {
                 return res.send({
                     error_code: 'SERVER_ERROR',
@@ -106,10 +121,10 @@ module.exports = (db) => {
 
             res.send(rows);
         });
-    });
+    }) );
 
-    app.get('/rides/:id', (req, res) => {
-        db.all('SELECT * FROM Rides WHERE rideID=?', [req.params.id], function (err, rows) {
+    app.get('/rides/:id', asyncMiddleware(async (req, res) => {
+        await db.all('SELECT * FROM Rides WHERE rideID=?', [req.params.id], function (err, rows) {
             if (err) {
                 return res.send({
                     error_code: 'SERVER_ERROR',
@@ -126,7 +141,7 @@ module.exports = (db) => {
 
             res.send(rows);
         });
-    });
+    }) );
 
     return app;
 };
