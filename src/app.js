@@ -8,7 +8,7 @@ const jsonParser = bodyParser.json();
 
 const asyncMiddleware = fn =>
     (req, res, next) => {
-        Promise.resolve(fn(req, res, next))
+        return Promise.resolve(fn(req, res, next))
             .catch(next);
     };
 
@@ -22,6 +22,23 @@ const logger = createLogger({
 });
 
 module.exports = (db) => {
+
+    const getRideById = asyncMiddleware(async (rideId) => {
+        return new Promise((resolve, reject) => {
+            db.all('SELECT * FROM Rides WHERE rideID = ?', rideId, function (err, rows) {
+                if (err) {
+                    reject({
+                        error_code: 'SERVER_ERROR',
+                        message: 'Unknown error'
+                    });
+                }
+
+                resolve(rows);
+            });
+        })
+    });
+
+
     app.get('/health', (req, res) => {
         logger.log('info', 'Hit %s', 'Healthy');
         res.send('Healthy');
@@ -81,16 +98,12 @@ module.exports = (db) => {
                 });
             }
 
-            db.all('SELECT * FROM Rides WHERE rideID = ?', this.lastID, function (err, rows) {
-                if (err) {
-                    return res.send({
-                        error_code: 'SERVER_ERROR',
-                        message: 'Unknown error'
-                    });
-                }
-
+            getRideById(this.lastID).then(rows => {
                 res.send(rows);
+            }).catch(error => {
+                res.send(error)
             });
+
         });
     }) );
 
@@ -104,6 +117,7 @@ module.exports = (db) => {
             limit = 10;
         }
         logger.log('info', 'limit ' + limit + ' offset ' + offset);
+
         await db.all('SELECT * FROM Rides LIMIT ? OFFSET ?', [limit, offset], function (err, rows) {
             if (err) {
                 return res.send({
@@ -124,14 +138,8 @@ module.exports = (db) => {
     }) );
 
     app.get('/rides/:id', asyncMiddleware(async (req, res) => {
-        await db.all('SELECT * FROM Rides WHERE rideID=?', [req.params.id], function (err, rows) {
-            if (err) {
-                return res.send({
-                    error_code: 'SERVER_ERROR',
-                    message: 'Unknown error'
-                });
-            }
 
+        await getRideById(req.params.id).then(rows => {
             if (rows.length === 0) {
                 return res.send({
                     error_code: 'RIDES_NOT_FOUND_ERROR',
@@ -140,7 +148,10 @@ module.exports = (db) => {
             }
 
             res.send(rows);
+        }).catch(error => {
+            res.send(error)
         });
+
     }) );
 
     return app;
